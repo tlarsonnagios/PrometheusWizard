@@ -88,7 +88,7 @@ def check_metrics(args):
                 f" / node_filesystem_size_bytes{{mountpoint='/' , instance='{args.instance}'}} * 100"
             )
         else:
-            disk_query = "(node_filesystem_size_bytes{mountpoint='/'} - node_filesystem_avail_bytes{mountpoint='/'}) / node_filesystem_size_bytes{mountpoint='/'} * 100"
+            disk_query = "(node_filesystem_size_bytes{mountpoint='/'} - node_filesystem_avail_bytes{mountpoint='/'} ) / node_filesystem_size_bytes{mountpoint='/'} * 100"
         disk_usage = get_metric(prometheus_url, disk_query)
         if disk_usage is not None:
             if disk_usage > args.critical_disk:
@@ -121,8 +121,23 @@ def check_metrics(args):
         else:
             messages.append("UNKNOWN: Load metric not found")
 
+    # Custom metric
+    if args.custom:
+        custom_value = get_metric(prometheus_url, args.custom)
+        if custom_value is not None:
+            if custom_value > args.critical_custom:
+                messages.append(f"CRITICAL: Custom metric at {custom_value:.2f}")
+                status = 2
+            elif custom_value > args.warning_custom:
+                messages.append(f"WARNING: Custom metric at {custom_value:.2f}")
+                status = max(status, 1)
+            else:
+                messages.append(f"OK: Custom metric at {custom_value:.2f}")
+        else:
+            messages.append("UNKNOWN: Custom metric not found")
+
     if not messages:
-        print("UNKNOWN: No metrics selected. Use --cpu, --mem, --disk, or --load")
+        print("UNKNOWN: No metrics selected. Use --cpu, --mem, --disk, --load, or --custom")
         sys.exit(3)
 
     print(" | ".join(messages))
@@ -138,6 +153,7 @@ def main():
     parser.add_argument("--mem", action="store_true", help="Check Memory usage")
     parser.add_argument("--disk", action="store_true", help="Check Disk usage")
     parser.add_argument("--load", action="store_true", help="Check Load Average")
+    parser.add_argument("--custom", type=str, help="Custom PromQL query for a metric from the /metrics page")
 
     parser.add_argument("--warning-cpu", type=float, default=DEFAULT_THRESHOLDS["cpu"]["warning"], help="CPU warning threshold")
     parser.add_argument("--critical-cpu", type=float, default=DEFAULT_THRESHOLDS["cpu"]["critical"], help="CPU critical threshold")
@@ -151,7 +167,17 @@ def main():
     parser.add_argument("--warning-load", type=float, default=DEFAULT_THRESHOLDS["load"]["warning"], help="Load warning threshold")
     parser.add_argument("--critical-load", type=float, default=DEFAULT_THRESHOLDS["load"]["critical"], help="Load critical threshold")
 
+    parser.add_argument("--warning-custom", type=float, help="Custom metric warning threshold (requires --custom)")
+    parser.add_argument("--critical-custom", type=float, help="Custom metric critical threshold (requires --custom)")
+
     args = parser.parse_args()
+
+    # If a custom query is provided, ensure both custom thresholds are provided.
+    if args.custom:
+        if args.warning_custom is None or args.critical_custom is None:
+            print("ERROR: When using --custom, both --warning-custom and --critical-custom thresholds must be provided.")
+            sys.exit(3)
+
     check_metrics(args)
 
 if __name__ == "__main__":
