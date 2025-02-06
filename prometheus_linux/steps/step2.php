@@ -1,13 +1,12 @@
     <!--                                   -->
     <!-- The initial data set from Step 1. -->
     <!--                                   -->
-    <input type="hidden" id="hostname" name="hostname" value="<?= encode_form_val($hostname) ?>">
-    <input type="hidden" id="operation" name="operation" value="<?= encode_form_val($operation) ?>">
+    
+    <!-- <input type="hidden" id="operation" name="operation" value="<?= encode_form_val($operation) ?>">
     <input type="hidden" id="selectedhostconfig" name="selectedhostconfig" value="<?= encode_form_val($selectedhostconfig) ?>">
-    <input type="hidden" id="config_serial" name="config_serial" value="<?= (!empty($config)) ? base64_encode(json_encode($config)) : "" ?>" />
-    <input type="hidden" name="ip_address" value="<?= encode_form_val($address) ?>">
-    <input type="hidden" name="services_serial" value="<?= encode_form_val($services_serial) ?>">
-    <input type="hidden" name="serviceargs_serial" value="<?= encode_form_val($serviceargs_serial) ?>">
+    <input type="hidden" id="config_serial" name="config_serial" value="<?= (!empty($config)) ? base64_encode(json_encode($config)) : "" ?>" /> -->
+
+    <input type="hidden" name="linux_hosts" value="<?= encode_form_val($linux_hosts) ?>">
 
 <?php
    # include_once __DIR__.'/../../../utils-xi2024-wizards.inc.php';

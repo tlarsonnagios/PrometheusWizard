@@ -49,8 +49,6 @@ function prometheus_linux_configwizard_func($mode = "", $inargs = null, &$outarg
 
     switch ($mode) {
         case CONFIGWIZARD_MODE_GETSTAGE1HTML:
-            $address = grab_array_var($inargs, "ip_address", "");
-
             ob_start();
             include __DIR__.'/steps/step1.php';
             $output = ob_get_clean();
@@ -59,21 +57,13 @@ function prometheus_linux_configwizard_func($mode = "", $inargs = null, &$outarg
 
         case CONFIGWIZARD_MODE_VALIDATESTAGE1DATA:
             // Get variables that were passed to us
-            $address = grab_array_var($inargs, "ip_address", "");
-            $address = nagiosccm_replace_user_macros($address);
-            $hostname = grab_array_var($inargs, "hostname", "");
+            $linux_hosts = grab_array_var($inargs, "linux_hosts");
 
-            print "Stage 1 Validation - Processed address: " . $address . ", Hostname: " . $hostname . "<br>\n";
+            print "Stage 1 Validation - Linux Hosts: " . $linux_hosts . "<br>\n";
 
             // Check for errors
             $errors = 0;
             $errmsg = array();
-
-            if (have_value($address) == false) {
-                $errmsg[$errors++] = _("No address specified.");
-            } else if (!valid_ip($address)) {
-                $errmsg[$errors++] = _("Invalid IP address.");
-            }
 
             if ($errors > 0) {
                 $outargs[CONFIGWIZARD_ERROR_MESSAGES] = $errmsg;
@@ -84,11 +74,12 @@ function prometheus_linux_configwizard_func($mode = "", $inargs = null, &$outarg
 
         case CONFIGWIZARD_MODE_GETSTAGE2HTML:            
             // Get variables that were passed to us
-            $address = grab_array_var($inargs, "ip_address", "");
-            $address = nagiosccm_replace_user_macros($address);
-            $hostname = grab_array_var($inargs, "hostname", "");
+            $linux_hosts = grab_array_var($inargs, "linux_hosts");
 
-            print "Stage 2 HTML - Address: " . $address . ", Hostname: " . $hostname . "<br>\n";
+            // Encode all data for passing through
+            $linux_hosts_serial = base64_encode($linux_hosts);
+
+            print "Stage 2 HTML - Linux Hosts: " . $linux_hosts . "<br>\n";
 
             ob_start();
             include __DIR__.'/steps/step2.php';
@@ -97,14 +88,12 @@ function prometheus_linux_configwizard_func($mode = "", $inargs = null, &$outarg
             break;
 
         case CONFIGWIZARD_MODE_VALIDATESTAGE2DATA:
-            print "Stage 2 Validation - Input data: <pre>" . print_r($inargs, true) . "</pre><br>\n";
+            //print "Stage 2 Validation - Input data: <pre>" . print_r($inargs, true) . "</pre><br>\n";
 
             // Get variables that were passed to us
-            $address = grab_array_var($inargs, "ip_address", "");
-            $address = nagiosccm_replace_user_macros($address);
-            $hostname = grab_array_var($inargs, "hostname", "");
+            $linux_hosts = grab_array_var($inargs, "linux_hosts");
 
-            print "Stage 2 Validation - Address: " . $address . ", Hostname: " . $hostname . "<br>\n";
+            print "Stage 2 Validation - Linux Hosts: " . $linux_hosts . "<br>\n";
 
             // Check for errors
             $errors = 0;

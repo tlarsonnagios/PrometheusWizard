@@ -1,9 +1,9 @@
 <configwizard>
 	<templates>
-		<template filename="prometheus.cfg" />
+		<template filename="prometheus_server.cfg" />
 	</templates>
 	<plugins>
-		<plugin filename="check_prometheus.py" />
+		<plugin filename="check_prometheus_server.py" />
 	</plugins>
 	<logos>
 		<logo filename="prometheus.png" />
