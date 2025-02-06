@@ -44,6 +44,7 @@ def check_metrics(args):
                 messages.append(f"OK: {ok_msg} {value:.2f}%")
         else:
             messages.append(f"UNKNOWN: {ok_msg} metric not found")
+            status = 3  # Update status to UNKNOWN if a metric is not found
     
     if args.cpu:
         query = f"100 - (rate(node_cpu_seconds_total{{mode='idle'{instance_filter}}}[5m]) * 100)" if args.instance else "100 - (avg by(instance) (rate(node_cpu_seconds_total{mode='idle'}[5m])) * 100)"
@@ -74,9 +75,10 @@ def check_metrics(args):
                 messages.append(f"OK: Custom metric at {custom_value:.2f}")
         else:
             messages.append("UNKNOWN: Custom metric not found")
+            status = 3  # Ensure the status is set to UNKNOWN if custom metric is not found
     
     if not messages:
-        print("UNKNOWN: No metrics selected. Use --cpu, --mem, --disk, --load, or --custom")
+        print("UNKNOWN: No metrics selected or an unknown error occurred, use --cpu --mem --disk --load or --custom")
         sys.exit(3)
     
     print(", ".join(messages) + " |")
