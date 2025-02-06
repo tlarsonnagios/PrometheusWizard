@@ -73,7 +73,7 @@ def check_disk(metrics, warning, critical):
 def check_custom_metric(metrics, custom_metric, warning, critical):
     value = metrics.get(custom_metric, None)
     if value is None:
-        return f"CRITICAL: Custom metric {custom_metric} not found", 2
+        return f"UNKNOWN: Custom metric {custom_metric} not found", 3
     
     if value >= critical:
         return f"CRITICAL: {custom_metric} is {value}", 2
@@ -102,25 +102,28 @@ def check_metrics(args):
 
     if args.cpu:
         result, code = check_cpu(new_metrics, metrics, args.cpu_warning, args.cpu_critical)
-        results.append(result)
+        results.append((result, code))
         status = max(status, code)
 
     if args.mem:
         result, code = check_memory(new_metrics, args.mem_warning, args.mem_critical)
-        results.append(result)
+        results.append((result, code))
         status = max(status, code)
 
     if args.disk:
         result, code = check_disk(new_metrics, args.disk_warning, args.disk_critical)
-        results.append(result)
+        results.append((result, code))
         status = max(status, code)
 
     if args.custom_metric:
         result, code = check_custom_metric(new_metrics, args.custom_metric, args.custom_warning, args.custom_critical)
-        results.append(result)
+        results.append((result, code))
         status = max(status, code)
 
-    print(", ".join(results) + " |")
+    # Sort results by status code: CRITICAL (2), WARNING (1), UNKNOWN (3), OK (0)
+    results.sort(key=lambda x: x[1], reverse=True)
+    output = ", ".join(result for result, code in results) + " |"
+    print(output)
     sys.exit(status)
 
 # Argument parsing
