@@ -125,34 +125,20 @@ function prometheus_configwizard_func($mode = "", $inargs = null, &$outargs = nu
             $hostname = grab_array_var($inargs, "hostname");
             $services = grab_array_var($inargs, "services");
             $serviceargs = grab_array_var($inargs, "serviceargs");
-            $linux_hosts = grab_array_var($inargs, "linux_hosts");
-            $linux_services = grab_array_var($inargs, "linux_services");
-            $linux_serviceargs = grab_array_var($inargs, "linux_serviceargs");
-            $custom_linux_metrics = grab_array_var($inargs, "custom_linux_metrics");
 
             // Encode all data for passing through
             $services_serial = base64_encode(json_encode($services));
             $serviceargs_serial = base64_encode(json_encode($serviceargs));
-            $linux_hosts_serial = base64_encode($linux_hosts);
-            $linux_services_serial = base64_encode(json_encode($linux_services));
-            $linux_serviceargs_serial = base64_encode(json_encode($linux_serviceargs));
-            $custom_linux_metrics_serial = base64_encode(json_encode($custom_linux_metrics));
 
             print "Stage 3 HTML - Data being passed through:<br>\n";
             print "Services: <pre>" . print_r($services, true) . "</pre><br>\n";
             print "Service Args: <pre>" . print_r($serviceargs, true) . "</pre><br>\n";
-            print "Linux Services: <pre>" . print_r($linux_services, true) . "</pre><br>\n";
-            print "Linux Service Args: <pre>" . print_r($linux_serviceargs, true) . "</pre><br>\n";
 
             $output = '
                 <input type="hidden" name="ip_address" value="' . encode_form_val($address) . '">
                 <input type="hidden" name="hostname" value="' . encode_form_val($hostname) . '">
                 <input type="hidden" name="services_serial" value="' . $services_serial . '">
                 <input type="hidden" name="serviceargs_serial" value="' . $serviceargs_serial . '">
-                <input type="hidden" name="linux_hosts_serial" value="' . $linux_hosts_serial . '">
-                <input type="hidden" name="linux_services_serial" value="' . $linux_services_serial . '">
-                <input type="hidden" name="linux_serviceargs_serial" value="' . $linux_serviceargs_serial . '">
-                <input type="hidden" name="custom_linux_metrics_serial" value="' . $custom_linux_metrics_serial . '">
             ';
 
             break;
@@ -169,19 +155,11 @@ function prometheus_configwizard_func($mode = "", $inargs = null, &$outargs = nu
             $hostname = grab_array_var($inargs, "hostname", "");
             $address = grab_array_var($inargs, "ip_address", "");
             $services_serial = grab_array_var($inargs, "services_serial", "");
-            $serviceargs_serial = grab_array_var($inargs, "serviceargs_serial", "");
-            $linux_hosts_serial = grab_array_var($inargs, "linux_hosts_serial", "");
-            $linux_services_serial = grab_array_var($inargs, "linux_services_serial", "");
-            $linux_serviceargs_serial = grab_array_var($inargs, "linux_serviceargs_serial", "");
-            $custom_linux_metrics_serial = grab_array_var($inargs, "custom_linux_metrics_serial", "");
+            $serviceargs_serial = grab_array_var($inargs, "serviceargs_serial", "")
 
             // Decode all serialized data
             $services = json_decode(base64_decode($services_serial), true);
             $serviceargs = json_decode(base64_decode($serviceargs_serial), true);
-            $linux_hosts = base64_decode($linux_hosts_serial);
-            $linux_services = json_decode(base64_decode($linux_services_serial), true);
-            $linux_serviceargs = json_decode(base64_decode($linux_serviceargs_serial), true);
-            $custom_linux_metrics = json_decode(base64_decode($custom_linux_metrics_serial), true);
 
             // Debug output
             print "Get Objects - Input data: <pre>" . print_r($inargs, true) . "</pre><br>\n";
@@ -189,10 +167,6 @@ function prometheus_configwizard_func($mode = "", $inargs = null, &$outargs = nu
             print "Address: " . $address . "<br>\n";
             print "Services: <pre>" . print_r($services, true) . "</pre><br>\n";
             print "Service Args: <pre>" . print_r($serviceargs, true) . "</pre><br>\n";
-            print "Linux Hosts: " . $linux_hosts . "<br>\n";
-            print "Linux Services: <pre>" . print_r($linux_services, true) . "</pre><br>\n";
-            print "Linux Service Args: <pre>" . print_r($linux_serviceargs, true) . "</pre><br>\n";
-            print "Custom Linux Metrics: <pre>" . print_r($custom_linux_metrics, true) . "</pre><br>\n";
 
             // save data for later use in re-entrance
             $meta_arr = array();
@@ -200,10 +174,6 @@ function prometheus_configwizard_func($mode = "", $inargs = null, &$outargs = nu
             $meta_arr["ip_address"] = $address;
             $meta_arr["services"] = $services;
             $meta_arr["serviceargs"] = $serviceargs;
-            $meta_arr["linux_hosts"] = $linux_hosts;
-            $meta_arr["linux_services"] = $linux_services;
-            $meta_arr["linux_serviceargs"] = $linux_serviceargs;
-            $meta_arr["custom_linux_metrics"] = $custom_linux_metrics;
             save_configwizard_object_meta($wizard_name, $hostname, "", $meta_arr);
 
             $objs = array();
@@ -222,131 +192,49 @@ function prometheus_configwizard_func($mode = "", $inargs = null, &$outargs = nu
             }
 
             // Add Prometheus server services
-            $prometheus_server_check_command = "check_prometheus!";
+            $prometheus_server_check_command = "check_prometheus!--prometheus-host " . $address . " ";
             foreach ($services as $svc => $svcstate) {
                 if (empty($svcstate) || $svcstate !== "on") {
                     continue;
                 }
 
                 switch ($svc) {
-                    case "ping":
-                        $prometheus_server_check_command .= "--ping ";
-                        break;
                     case "cpu":
-                        $prometheus_server_check_command .= "--cpu --warning-cpu " . $serviceargs["cpu"]["warning"] . " --critical-cpu " . $serviceargs["cpu"]["critical"] . " ";
-                        break;
+                        $objs[] = array(
+                            "type" => OBJECTTYPE_SERVICE,
+                            "host_name" => $hostname,
+                            "service_description" => "Prometheus Server CPU",
+                            "use" => "xiwizard_prometheus_service",
+                            "check_command" => $prometheus_server_check_command . "--cpu --warning-cpu " . $serviceargs["cpu"]["warning"] . " --critical-cpu " . $serviceargs["cpu"]["critical"],
+                            "check_interval" => 1,
+                            "_xiwizard" => $wizard_name,
+                        );
+                        break; 
                     case "memory":
-                        $prometheus_server_check_command .= "--mem --warning-mem " . $serviceargs["memory"]["warning"] . " --critical-mem " . $serviceargs["memory"]["critical"] . " ";
+                        $objs[] = array(
+                            "type" => OBJECTTYPE_SERVICE,
+                            "host_name" => $hostname,
+                            "service_description" => "Prometheus Server Memory",
+                            "use" => "xiwizard_prometheus_service",
+                            "check_command" => $prometheus_server_check_command . "--mem --warning-mem " . $serviceargs["memory"]["warning"] . " --critical-mem " . $serviceargs["memory"]["critical"],
+                            "check_interval" => 1,
+                            "_xiwizard" => $wizard_name,
+                        );
                         break;
                     case "disk":
-                        $prometheus_server_check_command .= "--disk --warning-disk " . $serviceargs["disk"]["warning"] . " --critical-disk " . $serviceargs["disk"]["critical"] . " ";
+                        $objs[] = array(
+                            "type" => OBJECTTYPE_SERVICE,
+                            "host_name" => $hostname,
+                            "service_description" => "Prometheus Server Storage Usage",
+                            "use" => "xiwizard_prometheus_service",
+                            "check_command" => $prometheus_server_check_command . "--disk --warning-disk " . $serviceargs["disk"]["warning"] . " --critical-disk " . $serviceargs["disk"]["critical"],
+                            "check_interval" => 1,
+
+                            "_xiwizard" => $wizard_name,
+                        );
                         break;
                 }
             }
-            print "Prometheus Server Check Command: " . $prometheus_server_check_command . "<br>\n";
-
-            // Add the Prometheus server service check
-            $objs[] = array(
-                "type" => OBJECTTYPE_SERVICE,
-                "host_name" => $hostname,
-                "service_description" => "Prometheus Server",
-                "use" => "xiwizard_prometheus_service",
-                "check_command" => $prometheus_server_check_command,
-                "check_interval" => 1,
-                "_xiwizard" => $wizard_name,
-            );
-
-            // Add Linux hosts and their services
-            // if (!empty($linux_hosts)) {
-            //     $linux_host_list = explode("\n", trim($linux_hosts));
-            //     foreach ($linux_host_list as $linux_host) {
-            //         $linux_host = trim($linux_host);
-            //         if (empty($linux_host)) {
-            //             continue;
-            //         }
-
-            //         $linux_hostname = "linux_" . preg_replace("/[^a-zA-Z0-9]/", "_", $linux_host);
-
-            //         // Add Linux host
-            //         if (!host_exists($linux_hostname)) {
-            //             $objs[] = array(
-            //                 "type" => OBJECTTYPE_HOST,
-            //                 "use" => "xiwizard_prometheus_linux_host",
-            //                 "host_name" => $linux_hostname,
-            //                 "address" => $linux_host,
-            //                 "icon_image" => "linux40.png",
-            //                 "statusmap_image" => "linux40.png",
-            //                 "_xiwizard" => $wizard_name,
-            //             );
-            //         }
-
-            //         // Add Linux services
-            //         foreach ($linux_services as $svc => $svcstate) {
-            //             if (!$svcstate) {
-            //                 continue;
-            //             }
-
-            //             switch ($svc) {
-            //                 case "ping":
-            //                     $objs[] = array(
-            //                         "type" => OBJECTTYPE_SERVICE,
-            //                         "host_name" => $linux_hostname,
-            //                         "service_description" => "Ping",
-            //                         "use" => "xiwizard_prometheus_ping_service",
-            //                         "_xiwizard" => $wizard_name,
-            //                     );
-            //                     break;
-
-            //                 case "cpu":
-            //                     $objs[] = array(
-            //                         "type" => OBJECTTYPE_SERVICE,
-            //                         "host_name" => $linux_hostname,
-            //                         "service_description" => "CPU Usage",
-            //                         "use" => "xiwizard_prometheus_linux_cpu_service",
-            //                         "check_command" => "check_prometheus_linux_metric!cpu!" . $linux_serviceargs["cpu"]["warning"] . "!" . $linux_serviceargs["cpu"]["critical"],
-            //                         "_xiwizard" => $wizard_name,
-            //                     );
-            //                     break;
-
-            //                 case "memory":
-            //                     $objs[] = array(
-            //                         "type" => OBJECTTYPE_SERVICE,
-            //                         "host_name" => $linux_hostname,
-            //                         "service_description" => "Memory Usage",
-            //                         "use" => "xiwizard_prometheus_linux_memory_service",
-            //                         "check_command" => "check_prometheus_linux_metric!memory!" . $linux_serviceargs["memory"]["warning"] . "!" . $linux_serviceargs["memory"]["critical"],
-            //                         "_xiwizard" => $wizard_name,
-            //                     );
-            //                     break;
-
-            //                 case "disk":
-            //                     $objs[] = array(
-            //                         "type" => OBJECTTYPE_SERVICE,
-            //                         "host_name" => $linux_hostname,
-            //                         "service_description" => "Disk Usage",
-            //                         "use" => "xiwizard_prometheus_linux_disk_service",
-            //                         "check_command" => "check_prometheus_linux_metric!disk!" . $linux_serviceargs["disk"]["warning"] . "!" . $linux_serviceargs["disk"]["critical"],
-            //                         "_xiwizard" => $wizard_name,
-            //                     );
-            //                     break;
-            //             }
-            //         }
-
-            //         // Add custom Linux metrics
-            //         if (!empty($custom_linux_metrics)) {
-            //             foreach ($custom_linux_metrics as $metric) {
-            //                 $objs[] = array(
-            //                     "type" => OBJECTTYPE_SERVICE,
-            //                     "host_name" => $linux_hostname,
-            //                     "service_description" => $metric['label'],
-            //                     "use" => "xiwizard_prometheus_linux_custom_service",
-            //                     "check_command" => "check_prometheus_linux_custom_metric!" . $metric['name'] . "!" . $metric['warning'] . "!" . $metric['critical'],
-            //                     "_xiwizard" => $wizard_name,
-            //                 );
-            //             }
-            //         }
-            //     }
-            // }
 
             // After creating objects
             print "Get Objects - Created objects: <pre>" . print_r($objs, true) . "</pre><br>\n";

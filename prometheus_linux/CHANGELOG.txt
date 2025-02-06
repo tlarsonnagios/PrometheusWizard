@@ -1,0 +1,4 @@
+1.0.0 - 02/03/2025
+==================
+- Initial wizard -TL
+- Initial plugin -TF

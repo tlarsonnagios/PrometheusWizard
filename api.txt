@@ -1,0 +1,25 @@
+Arguments for all plugins:
+    -H : host address
+
+    -P : port number
+
+    --cpu
+    --cpu-warning
+    --cpu-critical
+
+    --mem
+    --mem-warning
+    --mem-critical
+
+    --disk
+    --disk-warning
+    --disk-critical
+
+    --custom-metric : custom metric's name example: promhttp_metric_handler_errors_total{cause="encoding"}
+    --custom-metric-warning
+    --custom-metric-critical
+
+Example:
+    check_prometheus.py -H 192.168.1.100 -P 9090 --cpu --cpu-warning 80 --cpu-critical 90
+
+    check_prometheus.py -H 192.168.1.100 -P 9090 --custom-metric promhttp_metric_handler_errors_total{cause="encoding"} --custom-metric-warning 100 --custom-metric-critical 200

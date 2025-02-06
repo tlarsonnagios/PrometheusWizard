@@ -1,0 +1,11 @@
+<configwizard>
+	<templates>
+		<template filename="prometheus_linux.cfg" />
+	</templates>
+	<plugins>
+		<plugin filename="check_prometheus_linux.py" />
+	</plugins>
+	<logos>
+		<logo filename="prometheus.png" />
+	</logos>
+</configwizard>

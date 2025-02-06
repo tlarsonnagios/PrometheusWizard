@@ -1,4 +1,4 @@
-<input type="hidden" id="selectedhostconfig" name="selectedhostconfig" value="<?= encode_form_val($selectedhostconfig) ?>" />
+    <input type="hidden" id="selectedhostconfig" name="selectedhostconfig" value="<?= encode_form_val($selectedhostconfig) ?>" />
     <input type="hidden" id="config_serial" name="config_serial" value="<?= (!empty($config)) ? base64_encode(json_encode($config)) : "" ?>" />
 
     <div class="container m-0 g-0">
@@ -9,7 +9,7 @@
         <!-- The configuration form. -->
         <!--                         -->
         <div id="configForm">
-            <h2 class="mb-2"><?= _('Prometheus Information') ?></h2>
+            <h2 class="mb-2"><?= _('Prometheus Server Information') ?></h2>
 
             <!-- Prometheus Server Address -->
             <div class="row mb-2">
@@ -44,7 +44,7 @@
                 <div class="col-sm-6">
                     <label for="hostname" class="form-label form-item-required"><?= _('Host Name:') ?> <?= xi6_info_tooltip(_('Name you would like to associate with this Prometheus server')) ?></label>
                     <div class="input-group position-relative">
-                        <input type="text" name="hostname" id="hostname" value="<?= encode_form_val($hostname) ?>" class="form-control form-control-sm monitor rounded" placeholder="<?= _("Enter Host Name:") ?>" >
+                        <input type="text" name="hostname" id="hostname" value="<?= encode_form_val($hostname ?? "Prometheus Server") ?>" class="form-control form-control-sm monitor rounded" placeholder="<?= _("Enter Host Name:") ?>" >
                         <div class="invalid-feedback">
                             <?= _("Please enter the Host Name") ?>
                         </div>
