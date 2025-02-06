@@ -1,111 +1,151 @@
 #!/usr/bin/env python3
+
 import requests
 import argparse
 import sys
+import time
 
-# Default thresholds for alerts
-DEFAULT_THRESHOLDS = {
-    "cpu": {"warning": 80, "critical": 90},
-    "mem": {"warning": 70, "critical": 90},
-    "disk": {"warning": 80, "critical": 90},
-    "load": {"warning": 2.0, "critical": 5.0},
-}
-
-def get_metric(prometheus_url, query):
-    """Fetch a metric value using a Prometheus API query."""
+# Function to query Prometheus Node Exporter metrics
+def get_metrics(prometheus_url):
     try:
-        response = requests.get(f"{prometheus_url}/api/v1/query", params={"query": query})
+        response = requests.get(prometheus_url)
         response.raise_for_status()
-        data = response.json()
-        if data and "data" in data and "result" in data["data"] and len(data["data"]["result"]) > 0:
-            return float(data["data"]["result"][0]["value"][1])
-        return None
+        return response.text
     except requests.exceptions.RequestException as e:
         print(f"CRITICAL: Failed to query Prometheus - {e}")
         sys.exit(2)
 
+# Function to parse metrics
+def parse_metrics(metrics_text):
+    metrics = {}
+    for line in metrics_text.splitlines():
+        if line.startswith('#') or not line.strip():
+            continue
+        parts = line.split()
+        if len(parts) == 2:
+            metrics[parts[0]] = float(parts[1])
+    return metrics
+
+# Function to check CPU usage
+def check_cpu(metrics, previous_metrics, warning, critical):
+    cpu_idle = sum(value for key, value in metrics.items() if 'node_cpu_seconds_total' in key and 'idle' in key)
+    cpu_total = sum(value for key, value in metrics.items() if 'node_cpu_seconds_total' in key)
+    
+    prev_cpu_idle = sum(value for key, value in previous_metrics.items() if 'node_cpu_seconds_total' in key and 'idle' in key)
+    prev_cpu_total = sum(value for key, value in previous_metrics.items() if 'node_cpu_seconds_total' in key)
+    
+    cpu_usage = 100 * (1 - ((cpu_idle - prev_cpu_idle) / (cpu_total - prev_cpu_total)))
+    
+    if cpu_usage >= critical:
+        return f"CRITICAL: CPU usage is {cpu_usage:.2f}%", 2
+    elif cpu_usage >= warning:
+        return f"WARNING: CPU usage is {cpu_usage:.2f}%", 1
+    else:
+        return f"OK: CPU usage is {cpu_usage:.2f}%", 0
+
+# Function to check memory usage
+def check_memory(metrics, warning, critical):
+    mem_total = metrics.get('node_memory_MemTotal_bytes', 0)
+    mem_available = metrics.get('node_memory_MemAvailable_bytes', 0)
+    mem_usage = 100 * (1 - (mem_available / mem_total))
+    
+    if mem_usage >= critical:
+        return f"CRITICAL: Memory usage is {mem_usage:.2f}%", 2
+    elif mem_usage >= warning:
+        return f"WARNING: Memory usage is {mem_usage:.2f}%", 1
+    else:
+        return f"OK: Memory usage is {mem_usage:.2f}%", 0
+
+# Function to check disk usage
+def check_disk(metrics, warning, critical):
+    disk_total = sum(value for key, value in metrics.items() if 'node_filesystem_size_bytes' in key)
+    disk_free = sum(value for key, value in metrics.items() if 'node_filesystem_free_bytes' in key)
+    disk_usage = 100 * (1 - (disk_free / disk_total))
+    
+    if disk_usage >= critical:
+        return f"CRITICAL: Disk usage is {disk_usage:.2f}%", 2
+    elif disk_usage >= warning:
+        return f"WARNING: Disk usage is {disk_usage:.2f}%", 1
+    else:
+        return f"OK: Disk usage is {disk_usage:.2f}%", 0
+
+# Function to check custom metric
+def check_custom_metric(metrics, custom_metric, warning, critical):
+    value = metrics.get(custom_metric, None)
+    if value is None:
+        return f"UNKNOWN: Custom metric {custom_metric} not found", 3
+    
+    if value >= critical:
+        return f"CRITICAL: {custom_metric} is {value}", 2
+    elif value >= warning:
+        return f"WARNING: {custom_metric} is {value}", 1
+    else:
+        return f"OK: {custom_metric} is {value}", 0
+
+# Main function to check metrics
 def check_metrics(args):
-    prometheus_url = f"http://{args.prometheus_host}:9090"
+    prometheus_url = f"http://{args.ip}:{args.port}/metrics"
+    
+    # Get initial metrics
+    metrics_text = get_metrics(prometheus_url)
+    metrics = parse_metrics(metrics_text)
+    
+    # Wait for the interval to get the next set of metrics
+    time.sleep(args.interval)
+    
+    # Get the next set of metrics
+    metrics_text = get_metrics(prometheus_url)
+    new_metrics = parse_metrics(metrics_text)
 
     status = 0
-    messages = []
-    instance_filter = f",instance='{args.instance}'" if args.instance else ""
+    results = []
 
-    def add_message(condition, critical_msg, warning_msg, ok_msg, value):
-        nonlocal status
-        if value is not None:
-            if value > condition["critical"]:
-                messages.append(f"CRITICAL: {critical_msg} {value:.2f}%")
-                status = 2
-            elif value > condition["warning"]:
-                messages.append(f"WARNING: {warning_msg} {value:.2f}%")
-                status = max(status, 1)
-            else:
-                messages.append(f"OK: {ok_msg} {value:.2f}%")
-        else:
-            messages.append(f"UNKNOWN: {ok_msg} metric not found")
-    
     if args.cpu:
-        query = f"100 - (rate(node_cpu_seconds_total{{mode='idle'{instance_filter}}}[5m]) * 100)" if args.instance else "100 - (avg by(instance) (rate(node_cpu_seconds_total{mode='idle'}[5m])) * 100)"
-        add_message(DEFAULT_THRESHOLDS["cpu"], "CPU at", "CPU at", "CPU at", get_metric(prometheus_url, query))
-    
+        result, code = check_cpu(new_metrics, metrics, args.cpu_warning, args.cpu_critical)
+        results.append((result, code))
+        status = max(status, code)
+
     if args.mem:
-        query = f"(node_memory_MemTotal_bytes{{instance='{args.instance}'}} - node_memory_MemAvailable_bytes{{instance='{args.instance}'}}) / node_memory_MemTotal_bytes{{instance='{args.instance}'}} * 100" if args.instance else "(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100"
-        add_message(DEFAULT_THRESHOLDS["mem"], "Memory at", "Memory at", "Memory at", get_metric(prometheus_url, query))
-    
+        result, code = check_memory(new_metrics, args.mem_warning, args.mem_critical)
+        results.append((result, code))
+        status = max(status, code)
+
     if args.disk:
-        query = f"(node_filesystem_size_bytes{{mountpoint='/'{instance_filter}}} - node_filesystem_avail_bytes{{mountpoint='/'{instance_filter}}}) / node_filesystem_size_bytes{{mountpoint='/'{instance_filter}}} * 100"
-        add_message(DEFAULT_THRESHOLDS["disk"], "Disk at", "Disk at", "Disk at", get_metric(prometheus_url, query))
-    
-    if args.load:
-        query = f"node_load1{{instance='{args.instance}'}}" if args.instance else "avg by(instance) (node_load1)"
-        add_message(DEFAULT_THRESHOLDS["load"], "Load at", "Load at", "Load at", get_metric(prometheus_url, query))
-    
-    if args.custom:
-        custom_value = get_metric(prometheus_url, args.custom)
-        if custom_value is not None:
-            if custom_value > args.critical_custom:
-                messages.append(f"CRITICAL: Custom metric at {custom_value:.2f}")
-                status = 2
-            elif custom_value > args.warning_custom:
-                messages.append(f"WARNING: Custom metric at {custom_value:.2f}")
-                status = max(status, 1)
-            else:
-                messages.append(f"OK: Custom metric at {custom_value:.2f}")
-        else:
-            messages.append("UNKNOWN: Custom metric not found")
-    
-    if not messages:
-        print("UNKNOWN: No metrics selected. Use --cpu, --mem, --disk, --load, or --custom")
-        sys.exit(3)
-    
-    print(", ".join(messages) + " |")
+        result, code = check_disk(new_metrics, args.disk_warning, args.disk_critical)
+        results.append((result, code))
+        status = max(status, code)
+
+    if args.custom_metric:
+        result, code = check_custom_metric(new_metrics, args.custom_metric, args.custom_warning, args.custom_critical)
+        results.append((result, code))
+        status = max(status, code)
+
+    # Sort results by status code: CRITICAL (2), WARNING (1), UNKNOWN (3), OK (0)
+    results.sort(key=lambda x: x[1], reverse=True)
+    output = ", ".join(result for result, code in results) + " |"
+    print(output)
     sys.exit(status)
 
-def main():
-    parser = argparse.ArgumentParser(description="Nagios plugin for monitoring system metrics via Prometheus with optional per-instance filtering")
-    parser.add_argument("--prometheus-host", required=True, help="Prometheus server IP or hostname")
-    parser.add_argument("--instance", help="Specify a Node Exporter instance (IP:PORT) to query")
+# Argument parsing
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="Check Prometheus Node Exporter metrics.")
+    parser.add_argument("-H", "--ip", required=True, help="IP address of the Node Exporter machine")
+    parser.add_argument("-P", "--port", required=True, help="Port of the Node Exporter machine")
     parser.add_argument("--cpu", action="store_true", help="Check CPU usage")
-    parser.add_argument("--mem", action="store_true", help="Check Memory usage")
-    parser.add_argument("--disk", action="store_true", help="Check Disk usage")
-    parser.add_argument("--load", action="store_true", help="Check Load Average")
-    parser.add_argument("--custom", type=str, help="Custom PromQL query for a metric from the /metrics page")
-
-    for key in DEFAULT_THRESHOLDS:
-        parser.add_argument(f"--warning-{key}", type=float, default=DEFAULT_THRESHOLDS[key]["warning"], help=f"{key.capitalize()} warning threshold")
-        parser.add_argument(f"--critical-{key}", type=float, default=DEFAULT_THRESHOLDS[key]["critical"], help=f"{key.capitalize()} critical threshold")
-    
-    parser.add_argument("--warning-custom", type=float, help="Custom metric warning threshold (requires --custom)")
-    parser.add_argument("--critical-custom", type=float, help="Custom metric critical threshold (requires --custom)")
-    
-    args = parser.parse_args()
-    
-    if args.custom and (args.warning_custom is None or args.critical_custom is None):
-        print("ERROR: When using --custom, both --warning-custom and --critical-custom thresholds must be provided.")
-        sys.exit(3)
-    
-    check_metrics(args)
+    parser.add_argument("--mem", action="store_true", help="Check memory usage")
+    parser.add_argument("--disk", action="store_true", help="Check disk usage")
+    parser.add_argument("--custom-metric", help="Check custom metric")
+    parser.add_argument("--interval", type=int, default=5, help="Interval in seconds between metric checks")
+    parser.add_argument("--cpu-warning", type=float, default=70.0, help="Warning threshold for CPU usage")
+    parser.add_argument("--cpu-critical", type=float, default=90.0, help="Critical threshold for CPU usage")
+    parser.add_argument("--mem-warning", type=float, default=70.0, help="Warning threshold for memory usage")
+    parser.add_argument("--mem-critical", type=float, default=90.0, help="Critical threshold for memory usage")
+    parser.add_argument("--disk-warning", type=float, default=70.0, help="Warning threshold for disk usage")
+    parser.add_argument("--disk-critical", type=float, default=90.0, help="Critical threshold for disk usage")
+    parser.add_argument("--custom-warning", type=float, default=70.0, help="Warning threshold for custom metric")
+    parser.add_argument("--custom-critical", type=float, default=90.0, help="Critical threshold for custom metric")
+    return parser.parse_args()
 
 if __name__ == "__main__":
-    main()
+    args = parse_arguments()
+    check_metrics(args)
