@@ -1,16 +1,8 @@
     <!--                                   -->
     <!-- The initial data set from Step 1. -->
     <!--                                   -->
-    
-    <!-- <input type="hidden" id="operation" name="operation" value="<?= encode_form_val($operation) ?>">
-    <input type="hidden" id="selectedhostconfig" name="selectedhostconfig" value="<?= encode_form_val($selectedhostconfig) ?>">
-    <input type="hidden" id="config_serial" name="config_serial" value="<?= (!empty($config)) ? base64_encode(json_encode($config)) : "" ?>" /> -->
-
     <input type="hidden" name="linux_hosts" value="<?= encode_form_val($linux_hosts) ?>">
 
-<?php
-   # include_once __DIR__.'/../../../utils-xi2024-wizards.inc.php';
-?>
     <div class="container m-0 g-0">
         <h2 class="mt-4"><?= _('Linux Services') ?></h2>
         <p><?= _('Specify which Linux metrics you would like to monitor') ?></p>
@@ -231,7 +223,6 @@
                             <i class="material-symbols-outlined md-warning md-18 md-400">warning</i>
                         </span>
                         <input type="text" name="custom_linux_metrics[${customLinuxMetricCount}][warning]" id="custom_linux_metric_warning_${customLinuxMetricCount}" class="form-control form-control-sm" value="80" required>
-                        <span class="input-group-text">%</span>
                     </div>
                 </div>
                 <div class="col-sm-2">
@@ -241,14 +232,14 @@
                             <i class="material-symbols-outlined md-critical md-18 md-400">error</i>
                         </span>
                         <input type="text" name="custom_linux_metrics[${customLinuxMetricCount}][critical]" id="custom_linux_metric_critical_${customLinuxMetricCount}" class="form-control form-control-sm" value="90" required>
-                        <span class="input-group-text">%</span>
                     </div>
                 </div>
                 <div class="col-sm-2 d-flex align-items-end">
-                    <button type="button" class="btn btn-danger btn-sm mb-2" onclick="removeCustomLinuxMetric(${customLinuxMetricCount})"><i class="fa fa-trash"></i> <?= _('Remove') ?></button>
+                    <button type="button" class="btn btn-danger btn-sm" onclick="removeCustomLinuxMetric(${customLinuxMetricCount})"><i class="fa fa-trash"></i> <?= _('Remove') ?></button>
                 </div>
             `;
             customMetrics.appendChild(newMetric);
+
             customLinuxMetricCount++;
         }
 

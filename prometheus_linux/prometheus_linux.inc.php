@@ -57,9 +57,10 @@ function prometheus_linux_configwizard_func($mode = "", $inargs = null, &$outarg
 
         case CONFIGWIZARD_MODE_VALIDATESTAGE1DATA:
             // Get variables that were passed to us
-            $linux_hosts = grab_array_var($inargs, "linux_hosts");
+            $linux_hosts = grab_array_var($inargs, "linux_hosts", "");
+            $port = grab_array_var($inargs, "port", 9100);
 
-            print "Stage 1 Validation - Linux Hosts: " . $linux_hosts . "<br>\n";
+            print "Stage 1 Validation - Linux Hosts: " . $linux_hosts . ", Linux Host Port: " . $port . "<br>\n";
 
             // Check for errors
             $errors = 0;
@@ -75,6 +76,7 @@ function prometheus_linux_configwizard_func($mode = "", $inargs = null, &$outarg
         case CONFIGWIZARD_MODE_GETSTAGE2HTML:            
             // Get variables that were passed to us
             $linux_hosts = grab_array_var($inargs, "linux_hosts");
+            $port = grab_array_var($inargs, "port", 9100);
 
             // Encode all data for passing through
             $linux_hosts_serial = base64_encode($linux_hosts);
@@ -88,10 +90,11 @@ function prometheus_linux_configwizard_func($mode = "", $inargs = null, &$outarg
             break;
 
         case CONFIGWIZARD_MODE_VALIDATESTAGE2DATA:
-            //print "Stage 2 Validation - Input data: <pre>" . print_r($inargs, true) . "</pre><br>\n";
+            print "Stage 2 Validation - Input data: <pre>" . print_r($inargs, true) . "</pre><br>\n";
 
             // Get variables that were passed to us
             $linux_hosts = grab_array_var($inargs, "linux_hosts");
+            $port = grab_array_var($inargs, "port", 9100);
 
             print "Stage 2 Validation - Linux Hosts: " . $linux_hosts . "<br>\n";
 
@@ -111,6 +114,7 @@ function prometheus_linux_configwizard_func($mode = "", $inargs = null, &$outarg
 
             // get variables that were passed to us
             $linux_hosts = grab_array_var($inargs, "linux_hosts");
+            $port = grab_array_var($inargs, "port", 9100);
             $linux_services = grab_array_var($inargs, "linux_services");
             $linux_serviceargs = grab_array_var($inargs, "linux_serviceargs");
             $custom_linux_metrics = grab_array_var($inargs, "custom_linux_metrics");
@@ -127,6 +131,7 @@ function prometheus_linux_configwizard_func($mode = "", $inargs = null, &$outarg
 
             $output = '
                 <input type="hidden" name="linux_hosts_serial" value="' . $linux_hosts_serial . '">
+                <input type="hidden" name="port" value="' . $port . '">
                 <input type="hidden" name="linux_services_serial" value="' . $linux_services_serial . '">
                 <input type="hidden" name="linux_serviceargs_serial" value="' . $linux_serviceargs_serial . '">
                 <input type="hidden" name="custom_linux_metrics_serial" value="' . $custom_linux_metrics_serial . '">
@@ -144,6 +149,7 @@ function prometheus_linux_configwizard_func($mode = "", $inargs = null, &$outarg
         case CONFIGWIZARD_MODE_GETOBJECTS:
             // Get all input data
             $linux_hosts_serial = grab_array_var($inargs, "linux_hosts_serial", "");
+            $port = grab_array_var($inargs, "port", 9100);
             $linux_services_serial = grab_array_var($inargs, "linux_services_serial", "");
             $linux_serviceargs_serial = grab_array_var($inargs, "linux_serviceargs_serial", "");
             $custom_linux_metrics_serial = grab_array_var($inargs, "custom_linux_metrics_serial", "");
@@ -157,6 +163,7 @@ function prometheus_linux_configwizard_func($mode = "", $inargs = null, &$outarg
             // Debug output
             print "Get Objects - Input data: <pre>" . print_r($inargs, true) . "</pre><br>\n";
             print "Linux Hosts: " . $linux_hosts . "<br>\n";
+            print "Linux Host Port: " . $port . "<br>\n";
             print "Linux Services: <pre>" . print_r($linux_services, true) . "</pre><br>\n";
             print "Linux Service Args: <pre>" . print_r($linux_serviceargs, true) . "</pre><br>\n";
             print "Custom Linux Metrics: <pre>" . print_r($custom_linux_metrics, true) . "</pre><br>\n";
