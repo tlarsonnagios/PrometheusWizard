@@ -85,7 +85,7 @@ def check_metrics(args):
 def main():
     parser = argparse.ArgumentParser(description="Nagios plugin for monitoring system metrics via Prometheus with optional per-instance filtering")
     parser.add_argument("--prometheus-host", required=True, help="Prometheus server IP or hostname")
-    parser.add_argument("--instance", help="Specify a Node Exporter instance (IP:PORT) to query")
+    parser.add_argument("--instance", required=True, help="Specify a Node Exporter instance (IP:PORT) to query")
     parser.add_argument("--cpu", action="store_true", help="Check CPU usage")
     parser.add_argument("--mem", action="store_true", help="Check Memory usage")
     parser.add_argument("--disk", action="store_true", help="Check Disk usage")
