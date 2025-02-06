@@ -1,25 +1,25 @@
 <?php
 //
-// Prometheus Config Wizard
+// Prometheus Server Config Wizard
 // Copyright (c) 2025 Nagios Enterprises, LLC. All rights reserved.
 //
 
 include_once(dirname(__FILE__) . '/../configwizardhelper.inc.php');
 
-prometheus_configwizard_init();
+prometheus_server_configwizard_init();
 
-function prometheus_configwizard_init()
+function prometheus_server_configwizard_init()
 {
-    $name = "prometheus";
+    $name = "prometheus_server";
     $args = array(
         CONFIGWIZARD_NAME => $name,
         CONFIGWIZARD_VERSION => "1.0.0",
         CONFIGWIZARD_TYPE => CONFIGWIZARD_TYPE_MONITORING,
-        CONFIGWIZARD_DESCRIPTION => _("Monitor a Prometheus instance."),
-        CONFIGWIZARD_DISPLAYTITLE => _("Prometheus"),
-        CONFIGWIZARD_FUNCTION => "prometheus_configwizard_func",
+        CONFIGWIZARD_DESCRIPTION => _("Monitor a Prometheus server with Prometheus Node Exporter."),
+        CONFIGWIZARD_DISPLAYTITLE => _("Prometheus Server"),
+        CONFIGWIZARD_FUNCTION => "prometheus_server_configwizard_func",
         CONFIGWIZARD_PREVIEWIMAGE => "prometheus.png",
-        CONFIGWIZARD_FILTER_GROUPS => array('linux', 'windows'),
+        CONFIGWIZARD_FILTER_GROUPS => array('linux'),
         CONFIGWIZARD_REQUIRES_VERSION => 60100
     );
     register_configwizard($name, $args);
@@ -33,16 +33,16 @@ function prometheus_configwizard_init()
  *
  * @return string
  */
-function prometheus_configwizard_func($mode = "", $inargs = null, &$outargs = null, &$result = null)
+function prometheus_server_configwizard_func($mode = "", $inargs = null, &$outargs = null, &$result = null)
 {
-    $wizard_name = "prometheus";
+    $wizard_name = "prometheus_server";
 
     // initialize return code and output
     $result = 0;
     $output = "";
 
     // Debug: Print current mode and input arguments
-    print "Prometheus Wizard Mode: " . $mode . "<br>\n";
+    print "Prometheus Server Wizard Mode: " . $mode . "<br>\n";
 
     // initialize output args - pass back the same data we got
     $outargs[CONFIGWIZARD_PASSBACK_DATA] = $inargs;
@@ -155,7 +155,7 @@ function prometheus_configwizard_func($mode = "", $inargs = null, &$outargs = nu
             $hostname = grab_array_var($inargs, "hostname", "");
             $address = grab_array_var($inargs, "ip_address", "");
             $services_serial = grab_array_var($inargs, "services_serial", "");
-            $serviceargs_serial = grab_array_var($inargs, "serviceargs_serial", "")
+            $serviceargs_serial = grab_array_var($inargs, "serviceargs_serial", "");
 
             // Decode all serialized data
             $services = json_decode(base64_decode($services_serial), true);
@@ -192,7 +192,7 @@ function prometheus_configwizard_func($mode = "", $inargs = null, &$outargs = nu
             }
 
             // Add Prometheus server services
-            $prometheus_server_check_command = "check_prometheus!--prometheus-host " . $address . " ";
+            $prometheus_server_check_command = "check_prometheus_server!--prometheus-host " . $address . " ";
             foreach ($services as $svc => $svcstate) {
                 if (empty($svcstate) || $svcstate !== "on") {
                     continue;
@@ -204,7 +204,7 @@ function prometheus_configwizard_func($mode = "", $inargs = null, &$outargs = nu
                             "type" => OBJECTTYPE_SERVICE,
                             "host_name" => $hostname,
                             "service_description" => "Prometheus Server CPU",
-                            "use" => "xiwizard_prometheus_service",
+                            "use" => "xiwizard_prometheus_server_service",
                             "check_command" => $prometheus_server_check_command . "--cpu --warning-cpu " . $serviceargs["cpu"]["warning"] . " --critical-cpu " . $serviceargs["cpu"]["critical"],
                             "check_interval" => 1,
                             "_xiwizard" => $wizard_name,
@@ -215,7 +215,7 @@ function prometheus_configwizard_func($mode = "", $inargs = null, &$outargs = nu
                             "type" => OBJECTTYPE_SERVICE,
                             "host_name" => $hostname,
                             "service_description" => "Prometheus Server Memory",
-                            "use" => "xiwizard_prometheus_service",
+                            "use" => "xiwizard_prometheus_server_service",
                             "check_command" => $prometheus_server_check_command . "--mem --warning-mem " . $serviceargs["memory"]["warning"] . " --critical-mem " . $serviceargs["memory"]["critical"],
                             "check_interval" => 1,
                             "_xiwizard" => $wizard_name,
@@ -226,10 +226,9 @@ function prometheus_configwizard_func($mode = "", $inargs = null, &$outargs = nu
                             "type" => OBJECTTYPE_SERVICE,
                             "host_name" => $hostname,
                             "service_description" => "Prometheus Server Storage Usage",
-                            "use" => "xiwizard_prometheus_service",
+                            "use" => "xiwizard_prometheus_server_service",
                             "check_command" => $prometheus_server_check_command . "--disk --warning-disk " . $serviceargs["disk"]["warning"] . " --critical-disk " . $serviceargs["disk"]["critical"],
                             "check_interval" => 1,
-
                             "_xiwizard" => $wizard_name,
                         );
                         break;
