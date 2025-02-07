@@ -69,18 +69,36 @@ def check_disk(metrics, warning, critical):
     else:
         return f"OK: Disk usage is {disk_usage:.2f}%", 0
 
+# Function to convert bytes to appropriate unit
+def convert_bytes(value):
+    if value >= 1 << 40:
+        return f"{int(value / (1 << 40))} TB"
+    elif value >= 1 << 30:
+        return f"{int(value / (1 << 30))} GB"
+    elif value >= 1 << 20:
+        return f"{int(value / (1 << 20))} MB"
+    elif value >= 1 << 10:
+        return f"{int(value / (1 << 10))} KB"
+    else:
+        return f"{int(value)} bytes"
+
 # Function to check custom metric
 def check_custom_metric(metrics, custom_metric, warning, critical):
     value = metrics.get(custom_metric, None)
     if value is None:
         return f"UNKNOWN: Custom metric {custom_metric} not found", 3
     
-    if value >= critical:
-        return f"CRITICAL: {custom_metric} is {value}", 2
-    elif value >= warning:
-        return f"WARNING: {custom_metric} is {value}", 1
+    if 'bytes' in custom_metric:
+        value_str = convert_bytes(value)
     else:
-        return f"OK: {custom_metric} is {value}", 0
+        value_str = str(value)
+    
+    if value >= critical:
+        return f"CRITICAL: {custom_metric} is {value_str}", 2
+    elif value >= warning:
+        return f"WARNING: {custom_metric} is {value_str}", 1
+    else:
+        return f"OK: {custom_metric} is {value_str}", 0
 
 # Main function to check metrics
 def check_metrics(args):
