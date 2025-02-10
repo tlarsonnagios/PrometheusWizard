@@ -19,7 +19,7 @@ function prometheus_linux_configwizard_init()
         CONFIGWIZARD_DISPLAYTITLE => _("Prometheus Linux"),
         CONFIGWIZARD_FUNCTION => "prometheus_linux_configwizard_func",
         CONFIGWIZARD_PREVIEWIMAGE => "prometheus.png",
-        CONFIGWIZARD_FILTER_GROUPS => array('linux', 'windows'),
+        CONFIGWIZARD_FILTER_GROUPS => array('linux'),
         CONFIGWIZARD_REQUIRES_VERSION => 60100
     );
     register_configwizard($name, $args);
@@ -81,7 +81,7 @@ function prometheus_linux_configwizard_func($mode = "", $inargs = null, &$outarg
             // Encode all data for passing through
             $linux_hosts_serial = base64_encode($linux_hosts);
 
-            print "Stage 2 HTML - Linux Hosts: " . $linux_hosts . "<br>\n";
+            print "Stage 2 HTML - Linux Hosts: " . $linux_hosts . ", Linux Host Port: " . $port . "<br>\n";
 
             ob_start();
             include __DIR__.'/steps/step2.php';
@@ -178,71 +178,92 @@ function prometheus_linux_configwizard_func($mode = "", $inargs = null, &$outarg
 
             $objs = array();
 
+            // If no Linux hosts are selected, break
+            if (empty($linux_hosts)) {
+                break;
+            }
+
             // Add Linux hosts and their services
-            if (!empty($linux_hosts)) {
-                $linux_host_list = explode("\n", trim($linux_hosts));
-                foreach ($linux_host_list as $linux_host) {
-                    $linux_host = trim($linux_host);
-                    if (empty($linux_host)) {
+            $linux_host_list = explode("\n", trim($linux_hosts));
+            foreach ($linux_host_list as $linux_host) {
+                $linux_host = trim($linux_host);
+                if (empty($linux_host)) {
+                    continue;
+                }
+
+                // Add Linux host
+                $linux_host_name = "Prometheus Linux Host " . $linux_host;
+                if (!host_exists($linux_host)) {
+                    $objs[] = array(
+                        "type" => OBJECTTYPE_HOST,
+                        "use" => "xiwizard_prometheus_linux_host",
+                        "host_name" => $linux_host_name,
+                        "address" => $linux_host,
+                        "icon_image" => "prometheus.png",
+                        "statusmap_image" => "prometheus.png",
+                        "_xiwizard" => $wizard_name,
+                    );
+                }
+
+                // Build the check commands with all enabled metrics
+                foreach ($linux_services as $svc => $svcstate) {
+                    if (empty($svcstate) || $svcstate !== "on") {
                         continue;
                     }
 
-                    $linux_host_name = "Prometheus Linux Host " . $linux_host;
+                    $linux_check_command = "check_prometheus_linux!-H " . $linux_host . " -P " . $port . " ";
+                    $linux_service_description = "";
+                    
+                    switch ($svc) {
+                        case "cpu":
+                            $linux_check_command .= "--cpu --cpu-warning " . $linux_serviceargs["cpu"]["warning"] . " --cpu-critical " . $linux_serviceargs["cpu"]["critical"] . " ";
+                            $linux_service_description = "CPU Usage";
+                            break;
+                        case "memory":
+                            $linux_check_command .= "--mem --mem-warning " . $linux_serviceargs["memory"]["warning"] . " --mem-critical " . $linux_serviceargs["memory"]["critical"] . " ";
+                            $linux_service_description = "Memory Usage";
+                            break;
 
-                    // Add Linux host
-                    if (!host_exists($linux_host)) {
-                        $objs[] = array(
-                            "type" => OBJECTTYPE_HOST,
-                            "use" => "xiwizard_prometheus_host",
-                            "host_name" => $linux_host_name,
-                            "address" => $linux_host,
-                            "icon_image" => "prometheus.png",
-                            "statusmap_image" => "prometheus.png",
-                            "_xiwizard" => $wizard_name,
-                        );
+                        case "disk":
+                            $linux_check_command .= "--disk --disk-warning " . $linux_serviceargs["disk"]["warning"] . " --disk-critical " . $linux_serviceargs["disk"]["critical"] . " ";
+                            $linux_service_description = "Disk Usage";
+                            break;
                     }
-
-                    // Build the check command with all enabled metrics
-                    $linux_check_command = "check_prometheus!--prometheus-host " . $address . " --instance " . $linux_host . " ";
-                    foreach ($linux_services as $svc => $svcstate) {
-                        if (empty($svcstate) || $svcstate !== "on") {
-                            continue;
-                        }
-
-                        switch ($svc) {
-                            case "cpu":
-                                $linux_check_command .= "--cpu --warning-cpu " . $linux_serviceargs["cpu"]["warning"] . " --critical-cpu " . $linux_serviceargs["cpu"]["critical"] . " ";
-                                break;
-                            case "memory":
-                                $linux_check_command .= "--mem --warning-mem " . $linux_serviceargs["memory"]["warning"] . " --critical-mem " . $linux_serviceargs["memory"]["critical"] . " ";
-                                break;
-                            case "disk":
-                                $linux_check_command .= "--disk --warning-disk " . $linux_serviceargs["disk"]["warning"] . " --critical-disk " . $linux_serviceargs["disk"]["critical"] . " ";
-                                break;
-                        }
-                    }
-
-                    // Add custom metrics to the check command if any exist
-                    // if (!empty($custom_linux_metrics)) {
-                    //     foreach ($custom_linux_metrics as $metric) {
-                    //         $linux_check_command .= "--custom-metric '" . $metric['name'] . "' --warning-custom '" . $metric['warning'] . "' --critical-custom '" . $metric['critical'] . "' ";
-                    //     }
-                    // }
 
                     print "Linux Check Command for " . $linux_host . ": " . $linux_check_command . "<br>\n";
 
-                    // Add the consolidated Linux service check
+                    // Add the service check
                     $objs[] = array(
                         "type" => OBJECTTYPE_SERVICE,
                         "host_name" => $linux_host_name,
-                        "service_description" => "Linux Host " . $linux_host . " Status",
-                        "use" => "xiwizard_prometheus_service",
+                        "service_description" => $linux_service_description,
+                        "use" => "xiwizard_prometheus_linux_service",
                         "check_command" => $linux_check_command,
                         "check_interval" => 1,
                         "_xiwizard" => $wizard_name,
                     );
                 }
+
+                // Add services for custom metrics
+                if (!empty($custom_linux_metrics)) {
+                    foreach ($custom_linux_metrics as $metric) {
+                        $linux_check_command = "check_prometheus_linux!-H " . $linux_host . " -P " . $port . " ";
+                        $linux_check_command .= "--custom-metric '" . $metric['name'] . "' --custom-warning '" . $metric['warning'] . "' --custom-critical '" . $metric['critical'] . "' ";
+                        
+                        // Add the service check for custom metric
+                        $objs[] = array(
+                            "type" => OBJECTTYPE_SERVICE,
+                            "host_name" => $linux_host_name,
+                            "service_description" => $metric['label'],
+                            "use" => "xiwizard_prometheus_linux_service", 
+                            "check_command" => $linux_check_command,
+                            "check_interval" => 1,
+                            "_xiwizard" => $wizard_name,
+                        );
+                    }
+                }
             }
+            
 
             // After creating objects
             print "Get Objects - Created objects: <pre>" . print_r($objs, true) . "</pre><br>\n";

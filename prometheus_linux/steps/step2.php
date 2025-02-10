@@ -2,11 +2,74 @@
     <!-- The initial data set from Step 1. -->
     <!--                                   -->
     <input type="hidden" name="linux_hosts" value="<?= encode_form_val($linux_hosts) ?>">
+    <input type="hidden" name="port" value="<?= encode_form_val($port) ?>">
+
+<?php
+    // Use the hidden inputs directly
+    $host = filter_var(trim(explode("\n", $linux_hosts)[0]), FILTER_UNSAFE_RAW); 
+    $port = filter_var($port, FILTER_SANITIZE_NUMBER_INT);
+    $url = "http://$host:$port/metrics";
+
+    // Fetch the HTML content from the URL
+    $response = file_get_contents($url);
+
+    if ($response === FALSE) {
+        $error = error_get_last();
+        // echo "Error fetching data: " . $error['message'];
+    } else {
+        $metrics_array = array_filter(explode("\n", $response)); 
+
+        $parsed_metrics = [];
+        $categories = 0;
+        $metrics = 0;
+        $current_category = '';
+
+        foreach ($metrics_array as $line) {
+            $line_content = explode(' ', $line);
+
+            // Check for HELP line and create a new category
+            if (isset($line_content[1]) && $line_content[1] === 'HELP') {
+                $categories += 1;
+                $current_category = $line_content[2];
+                $parsed_metrics[$current_category] = [
+                    "tooltip" => implode(' ', array_slice($line_content, 3)),
+                    "metric_type" => '',
+                    "metrics" => []
+                ];
+                continue;
+            }
+
+            // Check for TYPE line and add the type to the current category
+            if (isset($line_content[1]) && $line_content[1] === 'TYPE' && $current_category) {
+                $parsed_metrics[$current_category]["metric_type"] = $line_content[3];
+                continue;
+            }
+
+            // Check for actual metric lines
+            if ($current_category) {
+                $metrics += 1;
+                $metric_name = $line_content[0];
+                $metric_value = $line_content[1];
+                $parsed_metrics[$current_category]["metrics"][$metric_name] = $metric_value;
+            }
+        }
+    }
+    echo json_encode($categories);
+    echo "<br>";
+    echo json_encode($metrics);
+
+    echo '<pre>' . json_encode($parsed_metrics, JSON_PRETTY_PRINT) . '</pre>';
+
+    // Function to escape special characters for HTML
+    function escapeHtml($string) {
+        return htmlspecialchars($string, ENT_QUOTES, 'UTF-8');
+    }
+?>
 
     <div class="container m-0 g-0">
         <h2 class="mt-4"><?= _('Linux Services') ?></h2>
         <p><?= _('Specify which Linux metrics you would like to monitor') ?></p>
-
+        
         <!-- Linux Metrics Select/Deselect All -->
         <div class="row">
             <div class="col-sm-12">
@@ -20,6 +83,7 @@
                 </fieldset>
             </div>
         </div>
+
 
         <!-- Linux Host CPU -->
         <div class="row">
@@ -57,6 +121,7 @@
             </div>
         </div>
 
+
         <!-- Linux Host Memory -->
         <div class="row">
             <div class="col-sm-12">
@@ -92,6 +157,7 @@
                 </fieldset>
             </div>
         </div>
+
 
         <!-- Linux Host Disk -->
         <div class="row">
@@ -129,60 +195,115 @@
             </div>
         </div>
 
+
         <!-- Custom Linux Metrics -->
         <h3 class="mt-4"><?= _('Custom Linux Metrics') ?></h3>
         <p><?= _('Add additional Prometheus metrics to monitor on your Linux hosts') ?></p>
-        <div id="custom-linux-metrics">
-<?php
-    if (!empty($custom_linux_metrics)) {
-        foreach ($custom_linux_metrics as $index => $metric) {
-?>
-            <div class="row mb-2 custom-linux-metric">
-                <div class="col-sm-3">
-                    <label for="custom_linux_metric_name_<?= $index ?>" class="form-label"><?= _('Linux Metric Name:') ?></label>
-                    <div class="input-group input-group-sm">
-                        <input type="text" name="custom_linux_metrics[<?= $index ?>][name]" id="custom_linux_metric_name_<?= $index ?>" class="form-control form-control-sm" value="<?= encode_form_val($metric['name']) ?>" placeholder="<?= _('node_memory_MemTotal_bytes') ?>" required>
+
+        <!-- Search and Select Metrics -->
+        <div class="row mb-2">
+            <div class="col-sm-12">
+                <label for="custom_linux_metric_search" class="form-label"><?= _('Search Metrics:') ?></label>
+                <div class="input-group input-group-sm">
+                    <div class="col-sm-9">
+                        <input type="text" id="custom_linux_metric_search" class="form-control form-control-sm" placeholder="<?= _('Type to search...') ?>" onkeyup="filterMetrics()">
+                        <select name="services-select[]" id="services-select" multiple="" class="form form-control metrics-select multiselect form-select">
+                            <?php foreach ($parsed_metrics as $category => $metric): ?>
+                                <?php $tooltip = $metric['tooltip']; ?>
+                                <?php $type = $metric['metric_type']; ?>
+                                <p> <?= escapeHtml($category) ?> </p>
+                                <?php foreach ($metric['metrics'] as $name => $value): ?>
+                                    <option value="<?= escapeHtml($name) ?>" onclick="addCustomMetric('<?= escapeHtml($name) ?>', '<?= escapeHtml($value) ?>', '<?= escapeHtml($tooltip) ?>', '<?= escapeHtml($type) ?>')" data-value="<?= escapeHtml($value) ?>" selected><?= escapeHtml($name) ?> | <?= escapeHtml($tooltip) ?> | Type: <?= escapeHtml($type) ?></option>
+                                <?php endforeach; ?>
+                            <?php endforeach; ?>
+                        </select>
+
                     </div>
                 </div>
-                <div class="col-sm-3">
-                    <label for="custom_linux_metric_label_<?= $index ?>" class="form-label"><?= _('Service Label:') ?></label>
+            </div>
+        </div>
+
+        <h3 class="mt-4"><?= _('Selected Metrics') ?></h3>
+        <div id="selected-metrics"></div>
+
+    <script type="text/javascript">
+        function filterMetrics() {
+            // Get the input field and convert to lowercase for case-insensitive comparison
+            const input = document.getElementById('custom_linux_metric_search').value.toLowerCase();
+            const select = document.getElementById('services-select');
+            const options = select.options;
+
+            // Loop through all options in the select dropdown
+            for (let i = 0; i < options.length; i++) {
+                const optionText = options[i].text.toLowerCase();
+
+                // Check if the option text contains the input text
+                if (optionText.includes(input)) {
+                    options[i].style.display = '';  // Show the option
+                } else {
+                    options[i].style.display = 'none';  // Hide the option
+                }
+            }
+        }
+
+
+
+        function addCustomMetric(name, value, tooltip, type) {
+            console.log("Adding Custom Metric: ", name, value);
+            console.log(tooltip);
+            const selectedMetricsDiv = document.getElementById('selected-metrics');
+            const newMetricRow = document.createElement('div');
+            newMetricRow.className = 'row mb-2 custom-linux-metric';
+            const index = selectedMetricsDiv.getElementsByClassName('custom-linux-metric').length; 
+            newMetricRow.innerHTML = `
+                <div class="col-sm-2">
+                    <label class="form-label"><?= _('Prometheus Metric Name:') ?></label>
                     <div class="input-group input-group-sm">
-                        <input type="text" name="custom_linux_metrics[<?= $index ?>][label]" id="custom_linux_metric_label_<?= $index ?>" class="form-control form-control-sm" value="<?= encode_form_val($metric['label']) ?>" placeholder="<?= _('Memory Total') ?>" required>
+                        <input type="text" name="custom_linux_metrics[${index}][name]" class="form-control form-control-sm" value="${name.replace(/"/g, '&quot;')}" required>
                     </div>
                 </div>
                 <div class="col-sm-2">
-                    <label for="custom_linux_metric_warning_<?= $index ?>" class="form-label"><?= _('Warning:') ?></label>
+                    <label class="form-label"><?= _('Service Name:') ?></label>
+                    <div class="input-group input-group-sm">
+                        <input type="text" name="custom_linux_metrics[${index}][label]" class="form-control form-control-sm" value="" required>
+                    </div>
+                </div>
+                <div class="col-sm-2">
+                    <label class="form-label"><?= _('Current Value:') ?></label>
+                    <div class="input-group input-group-sm">
+                        <input type="text" name="custom_linux_metrics[${index}][current_value]" class="form-control form-control-sm" value="${value.replace(/"/g, '&quot;')}" readonly>
+                    </div>
+                </div>
+                <div class="col-sm-2">
+                    <label class="form-label"><?= _('Warning:') ?></label>
                     <div class="input-group input-group-sm">
                         <span class="input-group-text">
                             <i class="material-symbols-outlined md-warning md-18 md-400">warning</i>
                         </span>
-                        <input type="text" name="custom_linux_metrics[<?= $index ?>][warning]" id="custom_linux_metric_warning_<?= $index ?>" class="form-control form-control-sm" value="<?= encode_form_val($metric['warning']) ?>" required>
+                        <input type="text" name="custom_linux_metrics[${index}][warning]" class="form-control form-control-sm" placeholder="Warning Threshold" required>
                     </div>
                 </div>
                 <div class="col-sm-2">
-                    <label for="custom_linux_metric_critical_<?= $index ?>" class="form-label"><?= _('Critical:') ?></label>
+                    <label class="form-label"><?= _('Critical:') ?></label>
                     <div class="input-group input-group-sm">
                         <span class="input-group-text">
                             <i class="material-symbols-outlined md-critical md-18 md-400">error</i>
                         </span>
-                        <input type="text" name="custom_linux_metrics[<?= $index ?>][critical]" id="custom_linux_metric_critical_<?= $index ?>" class="form-control form-control-sm" value="<?= encode_form_val($metric['critical']) ?>" required>
+                        <input type="text" name="custom_linux_metrics[${index}][critical]" class="form-control form-control-sm" placeholder="Critical Threshold" required>
                     </div>
                 </div>
-                <div class="col-sm-2 d-flex align-items-end">
-                    <button type="button" class="btn btn-danger btn-sm mb-2" onclick="removeCustomLinuxMetric(<?= $index ?>)"><i class="fa fa-trash"></i> <?= _('Remove') ?></button>
+                <div class="col-sm-1 d-flex align-items-end">
+                    <button type="button" class="btn btn-danger btn-sm" onclick="removeCustomMetric(this)"><i class="fa fa-trash"></i> <?= _('Remove') ?></button>
                 </div>
-            </div>
-<?php
+            `;
+            selectedMetricsDiv.appendChild(newMetricRow);
         }
-    }
-?>
-        </div>
-        <button type="button" class="btn btn-primary mb-4" onclick="addCustomLinuxMetric()"><i class="fa fa-plus"></i> <?= _('Add Custom Linux Metric') ?></button>
 
-    </div> <!-- container -->
+        function removeCustomMetric(button) {
+            const row = button.closest('.custom-linux-metric');
+            row.remove();
+        }
 
-    <script type="text/javascript" src="<?= get_base_url() ?>includes/js/wizards-bs5.js?<?= get_build_id(); ?>"></script>
-    <script type="text/javascript">
         function selectAllInSection(sectionClass, select) {
             const checkboxes = document.querySelectorAll(`.${sectionClass} input[type="checkbox"]`);
             checkboxes.forEach(checkbox => {
@@ -195,56 +316,5 @@
             const selectAllCheckbox = document.getElementById(`select_all_${sectionClass}`);
             const allChecked = Array.from(checkboxes).every(checkbox => checkbox.checked);
             selectAllCheckbox.checked = allChecked;
-        }
-
-        let customLinuxMetricCount = <?= !empty($custom_linux_metrics) ? max(array_keys($custom_linux_metrics)) + 1 : 0 ?>;
-
-        function addCustomLinuxMetric() {
-            const customMetrics = document.getElementById('custom-linux-metrics');
-            const newMetric = document.createElement('div');
-            newMetric.className = 'row mb-2 custom-linux-metric';
-            newMetric.innerHTML = `
-                <div class="col-sm-3">
-                    <label for="custom_linux_metric_name_${customLinuxMetricCount}" class="form-label"><?= _('Linux Metric Name:') ?></label>
-                    <div class="input-group input-group-sm">
-                        <input type="text" name="custom_linux_metrics[${customLinuxMetricCount}][name]" id="custom_linux_metric_name_${customLinuxMetricCount}" class="form-control form-control-sm" placeholder="<?= _('node_memory_MemTotal_bytes') ?>" required>
-                    </div>
-                </div>
-                <div class="col-sm-3">
-                    <label for="custom_linux_metric_label_${customLinuxMetricCount}" class="form-label"><?= _('Service Label:') ?></label>
-                    <div class="input-group input-group-sm">
-                        <input type="text" name="custom_linux_metrics[${customLinuxMetricCount}][label]" id="custom_linux_metric_label_${customLinuxMetricCount}" class="form-control form-control-sm" placeholder="<?= _('Memory Total') ?>" required>
-                    </div>
-                </div>
-                <div class="col-sm-2">
-                    <label for="custom_linux_metric_warning_${customLinuxMetricCount}" class="form-label"><?= _('Warning:') ?></label>
-                    <div class="input-group input-group-sm">
-                        <span class="input-group-text">
-                            <i class="material-symbols-outlined md-warning md-18 md-400">warning</i>
-                        </span>
-                        <input type="text" name="custom_linux_metrics[${customLinuxMetricCount}][warning]" id="custom_linux_metric_warning_${customLinuxMetricCount}" class="form-control form-control-sm" value="80" required>
-                    </div>
-                </div>
-                <div class="col-sm-2">
-                    <label for="custom_linux_metric_critical_${customLinuxMetricCount}" class="form-label"><?= _('Critical:') ?></label>
-                    <div class="input-group input-group-sm">
-                        <span class="input-group-text">
-                            <i class="material-symbols-outlined md-critical md-18 md-400">error</i>
-                        </span>
-                        <input type="text" name="custom_linux_metrics[${customLinuxMetricCount}][critical]" id="custom_linux_metric_critical_${customLinuxMetricCount}" class="form-control form-control-sm" value="90" required>
-                    </div>
-                </div>
-                <div class="col-sm-2 d-flex align-items-end">
-                    <button type="button" class="btn btn-danger btn-sm" onclick="removeCustomLinuxMetric(${customLinuxMetricCount})"><i class="fa fa-trash"></i> <?= _('Remove') ?></button>
-                </div>
-            `;
-            customMetrics.appendChild(newMetric);
-
-            customLinuxMetricCount++;
-        }
-
-        function removeCustomLinuxMetric(id) {
-            const metric = document.getElementById(`custom_linux_metric_name_${id}`).closest('.custom-linux-metric');
-            metric.remove();
         }
     </script>
